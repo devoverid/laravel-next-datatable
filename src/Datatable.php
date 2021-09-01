@@ -9,10 +9,6 @@ use NextDatatable\Datatable\Engine\Column;
 
 class Datatable
 {
-    private $log = [
-        'queries' => [],
-    ];
-
     /**
      * eloquent
      *
@@ -26,14 +22,6 @@ class Datatable
      * @var Request
      */
     private $request;
-
-        
-    /**
-     * wrapper
-     *
-     * @var Wrapper
-     */
-    private $wrapper;
     
     /**
      * http_method
@@ -50,17 +38,6 @@ class Datatable
     public function __construct(Request $request)
     {
         $this->request = $request;
-    }
-    
-    /**
-     * Add Query to log
-     *
-     * @param  mixed $query
-     * @return void
-     */
-    public function addQueryLog($query)
-    {
-        $this->log['queries'][] = $query;
     }
     
     /**
@@ -84,134 +61,29 @@ class Datatable
      */
     public function make($returnArray = true)
     {
-        if (!$this->eloquent) {
-            throw new \Exception('You must call of() method before make() method');
-        }
+        $eloquent = clone $this->eloquent;
+        $meta = $this->initMeta();
 
-        // reset log
-        $this->log = [
-            'queries' => [],
-        ];
-    
-        try {
-            // 
-            $this->initWrapper();
-            $this->initMeta();
+        $wrapper = $this->initWrapper($eloquent, $meta);
+        $content = $wrapper->make($returnArray);
 
-            $result = $this->buildQuery($returnArray);
-            return $this->buildResponse($result);
-        } catch (\Throwable $th) {
-            $returns = [
-                "status" => false,
-                "error" => $th->getMessage(),
-            ];
-            if (config('app.debug') == true) {
-                $returns['queries'] = $this->log['queries'];
-                $returns['request'] = $this->request->all();
-            }
-            return $returns;
-        }
+        return $content;
     }
-
-    private function buildResponse($content, $status = 200)
-    {
-        $headers = [];
-        return response()->json($content, $status, $headers);
-    }
-
     
     /**
-     * buildQuery
+     * initWrapper
      *
-     * @param  mixed $returnArray
-     * @return void
+     * @param  \Illuminate\Database\Eloquent\Builder $eloquent
+     * @param  array $meta
+     * @return Wrapper
      */
-    private function buildQuery($returnArray)
+    private function initWrapper($eloquent, $meta)
     {
-        $query = clone $this->eloquent;
-        $data = [];
-
-        // get total records
-        $recordsTotal = $query->count();
-
-        //
-        $columns = $this->wrapper->columns;
-        $order = $this->wrapper->order;
-        $filters = $this->wrapper->filters;
-        $meta = [
-            'columns' => $columns,
-            'order' => $order,
-            'filters' => $filters,
-        ];
-
-        // build select
-        $columnSelected = [];
-        for ($i = 0; $i < count($columns); $i++)
-        {
-            $column = $columns[$i];
-            array_push($columnSelected, $column->name);
-        }
-        $query->select($columnSelected);
-
-        // build filters search
-        if (isset($filters) && is_object($filters))
-        {
-            if (isset($filters->search) && $filters->search)
-            {
-                $search = $filters->search;
-                if ($search != '')
-                {
-                    $query->where(function ($query) use ($columns, $search) {
-                        for ($i = 0; $i < count($columns); $i++)
-                        {
-                            $column = $columns[$i];
-                            if ($column->searchable) $query->orWhere($column->name, 'like', '%' . $search . '%');
-                        }
-                    });
-                }
-            }
-        }
-
-        // build order
-        $primaryKey = $this->eloquent->getModel()->getKeyName();
-        if (count($order) == 0) array_push($order, (object) ['name' => $primaryKey, 'direction' => 'asc']);
-        for ($i = 0; $i < count($order); $i++)
-        {
-            $orderItem = (is_object($order[$i])) ? $order[$i] : (object) $order[$i];
-            $query->orderBy($orderItem->name, $orderItem->direction);
-        }
-
-        // get filtered records
-        $data = $query->get();
-        $recordsFiltered = count($data);
-
-        // 
-        $returns = [
-            "status" => true,
-            'recordsTotal' => $recordsTotal,
-            'recordsFiltered' => $recordsFiltered,
-            'meta' => $meta,
-            'data' => ($returnArray) ? $data->toArray() : $data,
-        ];
-        if (config('datatable.debug') == true) $returns['queries'] = $this->log['queries'];
-
-
-        // dd($returns);
-        return $returns;
+        return new Wrapper($eloquent, $meta);
     }
-    
+       
     /**
-     * init wrapper
-     *
-     * @return void
-     */
-    private function initWrapper()
-    {
-        $this->wrapper = new Wrapper();
-    }
-    
-    /**
-     * init meta
+     * Init meta
      *
      * @return void
      */
@@ -228,7 +100,7 @@ class Datatable
             'order' => $this->get('order', []),
             'filters' => (object) $this->get('filters', []),
         ];
-        $this->wrapper->setMeta($meta);
+        return $meta;
     }
     
     /**

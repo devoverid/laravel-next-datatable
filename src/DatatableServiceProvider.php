@@ -2,7 +2,6 @@
 
 namespace NextDatatable\Datatable;
 
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 
 class DatatableServiceProvider extends ServiceProvider
@@ -43,11 +42,6 @@ class DatatableServiceProvider extends ServiceProvider
             // Registering package commands.
             // $this->commands([]);
         }
-
-        // 
-        DB::listen(function ($query) {
-            $this->app->make('datatable')->addQueryLog($query);
-        });
     }
 
     /**

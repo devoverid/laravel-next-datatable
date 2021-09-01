@@ -18,7 +18,7 @@ composer require next-datatable/datatable
 
 Publish config :
 ```
-
+php artisan vendor:publish --provider="NextDatatable\Datatable\DatatableServiceProvider"
 ```
 
 ## Usage
