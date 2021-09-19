@@ -43,31 +43,17 @@ class Datatable
     /**
      * Pass the eloquent builder to the datatable
      * @param  \Illuminate\Database\Eloquent\Builder $eloquent
-     * @return void
+     * @return Wrapper
      */
     public function of($eloquent)
     {
         if (!$eloquent instanceof \Illuminate\Database\Eloquent\Builder) {
             throw new \Exception('The first parameter must be an instance of Illuminate\Database\Eloquent\Builder');
         }
-        $this->eloquent = $eloquent;
-        return $this;
-    }
-    
-    /**
-     * Make datatable
-     * 
-     * @return void
-     */
-    public function make($returnArray = true)
-    {
-        $eloquent = clone $this->eloquent;
         $meta = $this->initMeta();
-
+        $this->eloquent = $eloquent;
         $wrapper = $this->initWrapper($eloquent, $meta);
-        $content = $wrapper->make($returnArray);
-
-        return $content;
+        return $wrapper;
     }
     
     /**
@@ -99,6 +85,7 @@ class Datatable
             'columns' => $this->get('columns', []),
             'order' => $this->get('order', []),
             'filters' => (object) $this->get('filters', []),
+            'pagination' => (object) $this->get('pagination', []),
         ];
         return $meta;
     }

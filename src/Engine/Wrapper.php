@@ -31,6 +31,13 @@ class Wrapper
      * @var array
      */
     public $columns = [];    
+
+    /**
+     * pagination
+     *
+     * @var array
+     */
+    public $pagination = [];    
     
     /**
      * order
@@ -42,11 +49,17 @@ class Wrapper
     /**
      * filters
      *
-     * @var array
+     * @var object
      */
     public $filters;
-
     
+    /**
+     * filter callback
+     *
+     * @var array
+     */
+    private $filterCallback = [];
+
     /**
      * build
      *
@@ -79,10 +92,21 @@ class Wrapper
 
     public function setMeta($meta = []): void
     {
-        $this->meta     = $meta;
-        $this->columns  = $this->initColumns($this->getMeta('columns', []));
-        $this->order    = $this->getMeta('order', []);
-        $this->filters  = (object) $this->getMeta('filters', []);
+        // load meta
+        $this->meta = $meta;
+
+        // custom
+        $order = $this->getMeta('order', []);
+        foreach ($order as $key => $val)
+        {
+            if (gettype($val) === 'string') $order[$key] = json_decode($val);
+        }
+
+        // 
+        $this->columns      = $this->initColumns($this->getMeta('columns', []));
+        $this->order        = $order;
+        $this->filters      = (object) $this->getMeta('filters', []);
+        $this->pagination   = (object) $this->getMeta('pagination', []);
     }
     
     /**
@@ -90,7 +114,7 @@ class Wrapper
      *
      * @param  mixed $key
      * @param  mixed $default
-     * @return void
+     * @return mixed
      */
     private function getMeta($key, $default = null)
     {
@@ -110,6 +134,18 @@ class Wrapper
             array_push($result, new Column($column));
         }
         return $result;
+    }
+    
+    /**
+     * handle filter
+     *
+     * @param  mixed $name
+     * @param  mixed $callback
+     * @return Wrapper
+     */
+    public function filter($name, $callback) {
+        array_push($this->filterCallback, [$name, $callback]);
+        return $this;
     }
     
     
@@ -178,24 +214,26 @@ class Wrapper
         $columns = $this->columns;
         $order = $this->order;
         $filters = $this->filters;
-        $meta = [
+        $pagination = $this->pagination;
+        $meta = (object) [
             'columns' => $columns,
             'order' => $order,
             'filters' => $filters,
+            'pagination' => null,
         ];
 
         // build select
-        $columnSelected = [];
-        if (count($columns) > 0) {
-            for ($i = 0; $i < count($columns); $i++)
-            {
-                $column = $columns[$i];
-                array_push($columnSelected, $column->name);
-            }
-        } else {
-            $columnSelected = ['*'];
-        }
-        $query->select($columnSelected);
+        // $columnSelected = [];
+        // if (count($columns) > 0) {
+        //     for ($i = 0; $i < count($columns); $i++)
+        //     {
+        //         $column = $columns[$i];
+        //         array_push($columnSelected, $column->name);
+        //     }
+        // } else {
+        //     $columnSelected = ['*'];
+        // }
+        // $query->select($columnSelected);
 
         // build filters search
         if (isset($filters) && is_object($filters))
@@ -223,6 +261,35 @@ class Wrapper
         {
             $orderItem = (is_object($order[$i])) ? $order[$i] : (object) $order[$i];
             $query->orderBy($orderItem->name, $orderItem->direction);
+        }
+
+        // build pagination
+        if (isset($pagination) && is_object($pagination))
+        {
+            $currentPage = $pagination->currentPage ?? 1;
+            $perPage = $pagination->perPage ?? 10;
+            $totalPage = ceil($recordsTotal / $perPage);
+            $start_index = ($currentPage > 1) ? ($currentPage * $perPage) - $perPage : 0;
+            $firstItemIndex = $start_index + 1;
+            $lastItemIndex = $start_index + $perPage;
+            
+            $meta->pagination = (object) [
+                'currentPage' => $currentPage,
+                'perPage' => $perPage,
+                'totalPage' => $totalPage,
+                'firstItemIndex' => $firstItemIndex,
+                'lastItemIndex' => $lastItemIndex,
+            ];
+            $query->offset($start_index)->limit($perPage);
+        }
+
+        // custom filters
+        foreach ($this->filterCallback as $callback)
+        {
+            $name = $callback[0];
+            if (!isset($filters->{$name})) continue;
+            $data = $filters->{$name};
+            $query = call_user_func_array($callback[1], [$query, $data]);
         }
 
         // get filtered records

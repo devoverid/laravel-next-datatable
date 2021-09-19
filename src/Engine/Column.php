@@ -17,15 +17,28 @@ class Column
      */
     public function __construct($column)
     {
-        if (is_array($column)) $column = (object) $column;
-
-        $this->raw = $column;
-        $this->column = $column;
-
+        $this->initColumn($column);
         $this->name = $this->fill('name', '');
         $this->label = $this->fill('label', '');
         $this->searchable = $this->fill('searchable', true);
         $this->sortable = $this->fill('sortable', true);
+    }
+
+    /**
+     * initColumn
+     * 
+     * @param  mixed $column
+     * @return void
+     */
+    private function initColumn($column)
+    {
+        // 
+        if (is_string($column)) $column = json_decode($column);
+
+        // 
+        $this->raw = $column;
+        $this->column = $column;
+        if (is_array($column)) $column = (object) $column;
     }
     
     /**
