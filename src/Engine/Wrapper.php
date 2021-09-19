@@ -263,26 +263,6 @@ class Wrapper
             $query->orderBy($orderItem->name, $orderItem->direction);
         }
 
-        // build pagination
-        if (isset($pagination) && is_object($pagination))
-        {
-            $currentPage = $pagination->currentPage ?? 1;
-            $perPage = $pagination->perPage ?? 10;
-            $totalPage = ceil($recordsTotal / $perPage);
-            $start_index = ($currentPage > 1) ? ($currentPage * $perPage) - $perPage : 0;
-            $firstItemIndex = $start_index + 1;
-            $lastItemIndex = $start_index + $perPage;
-            
-            $meta->pagination = (object) [
-                'currentPage' => $currentPage,
-                'perPage' => $perPage,
-                'totalPage' => $totalPage,
-                'firstItemIndex' => $firstItemIndex,
-                'lastItemIndex' => $lastItemIndex,
-            ];
-            $query->offset($start_index)->limit($perPage);
-        }
-
         // custom filters
         foreach ($this->filterCallback as $callback)
         {
@@ -293,8 +273,36 @@ class Wrapper
         }
 
         // get filtered records
+        $recordsFiltered = $query->count();
+
+        // build pagination
+        if (isset($pagination) && is_object($pagination))
+        {
+            $currentPage = $pagination->currentPage ?? 1;
+            $perPage = $pagination->perPage ?? 10;
+            $start_index = ($currentPage > 1) ? ($currentPage * $perPage) - $perPage : 0;
+            $firstItemIndex = $start_index + 1;
+            $lastItemIndex = $start_index + $perPage;
+            
+            $meta->pagination = (object) [
+                'currentPage' => $currentPage,
+                'perPage' => $perPage,
+                'totalPage' => 0,
+                'firstItemIndex' => $firstItemIndex,
+                'lastItemIndex' => $lastItemIndex,
+            ];
+            $query->offset($start_index)->limit($perPage);
+        }
+
+        // get paginated records
         $data = $query->get();
-        $recordsFiltered = count($data);
+        $recordsPaginated = count($data);
+
+        // paginate
+        if (isset($pagination) && is_object($pagination))
+        {
+            $meta->pagination->totalPage = ceil($recordsFiltered / $meta->pagination->perPage);
+        }
 
         // 
         $returns = [
