@@ -59,6 +59,13 @@ class Wrapper
      * @var array
      */
     private $filterCallback = [];
+    
+    /**
+     * costum columns
+     *
+     * @var array
+     */
+    private $customColumn = [];
 
     /**
      * build
@@ -148,6 +155,17 @@ class Wrapper
         return $this;
     }
     
+    /**
+     * add custom column
+     *
+     * @param  mixed $name
+     * @param  mixed $callback
+     * @return Wrapper
+     */
+    public function addColumn($name, $callback) {
+        array_push($this->customColumn, [$name, $callback]);
+        return $this;
+    }    
     
     /**
      * make
@@ -244,12 +262,64 @@ class Wrapper
                 if ($search != '')
                 {
                     $query->where(function ($query) use ($columns, $search) {
+                        // main table
+                        for ($i = 0; $i < count($columns); $i++)
+                        {
+                            // 
+                            $column = $columns[$i];
+
+                            // 
+                            if (!$column->searchable) continue;
+                            if (strpos($column->name, '.')) continue;
+
+                            // 
+                            $query->orWhere($column->name, 'like', '%' . $search . '%');
+                        }
+                        
+                        // mapping relations
+                        $relations = [];
                         for ($i = 0; $i < count($columns); $i++)
                         {
                             $column = $columns[$i];
-                            if ($column->searchable) $query->orWhere($column->name, 'like', '%' . $search . '%');
+                            if (!strpos($column->name, '.')) continue;
+
+                            $col = explode('.', $column->name);
+                            $key = $col[count($col)-1];
+                            unset($col[count($col)-1]);
+                            $relation = implode('.', $col);
+                            
+                            if (!isset($relations[$relation])) $relations[$relation] = [];
+                            $relations[$relation][] = $key;
+                        }
+
+                        // apply search on relations table
+                        foreach ($relations as $key => $relation )
+                        {
+                            $query->orWhereHas($key, function ($query) use ($relation, $search)
+                            {
+                                $query->where(function ($query) use ($relation, $search) {
+                                    foreach ($relation as $col)
+                                    {
+                                        $query->orWhere($col, 'like', '%' . $search . '%');
+                                    }
+                                });
+                                return $query;
+                            });
                         }
                     });
+
+                    // 
+                    // if (strpos($column->name, '.')) 
+                    // {
+                    //     $cols = explode('.', $column->name);
+                    //     $table_relation =  $query->getModel()->detail()->getModel()->getTable();
+                    //     $query->orWhereHas($cols[0], function ($q) use ($cols, $search) {
+                    //         $q->where($cols[1], 'like', '%' . $search . '%');
+                    //     });
+                    //     // $column->name = implode('.', $cols);
+                    // } else {
+                    //     $query->orWhere($column->name, 'like', '%' . $search . '%');
+                    // }
                 }
             }
         }
@@ -304,13 +374,30 @@ class Wrapper
             $meta->pagination->totalPage = ceil($recordsFiltered / $meta->pagination->perPage);
         }
 
+        // add custom columns
+        // $data = ($returnArray) ? $data->toArray() : $data;
+        
+
+        // custom columns
+        $data_arr = $data->toArray();
+        foreach ($data_arr as $record_index => $record)
+        {
+            foreach ($this->customColumn as $column_index => $column)
+            {
+                $name = $column[0];
+                $callback = $column[1];
+                $data_arr[$record_index][$name] = call_user_func_array($callback, [$data[$record_index], $data]);
+            }
+        }
+
+
         // 
         $returns = [
             "status" => true,
             'recordsTotal' => $recordsTotal,
             'recordsFiltered' => $recordsFiltered,
             'meta' => $meta,
-            'data' => ($returnArray) ? $data->toArray() : $data,
+            'data' => $data_arr,
         ];
         if (config('datatable.debug') == true) $returns['queries'] = $this->log['queries'];
 
